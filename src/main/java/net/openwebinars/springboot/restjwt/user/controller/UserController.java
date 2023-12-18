@@ -1,7 +1,11 @@
 package net.openwebinars.springboot.restjwt.user.controller;
 
 import lombok.RequiredArgsConstructor;
+import net.openwebinars.springboot.restjwt.security.errorhandling.TokenRefreshException;
 import net.openwebinars.springboot.restjwt.security.jwt.access.JwtProvider;
+import net.openwebinars.springboot.restjwt.security.jwt.refresh.RefreshToken;
+import net.openwebinars.springboot.restjwt.security.jwt.refresh.RefreshTokenRequest;
+import net.openwebinars.springboot.restjwt.security.jwt.refresh.RefreshTokenService;
 import net.openwebinars.springboot.restjwt.user.dto.*;
 import net.openwebinars.springboot.restjwt.user.model.User;
 import net.openwebinars.springboot.restjwt.user.service.UserService;
@@ -25,6 +29,7 @@ public class UserController {
     private final UserService userService;
     private final AuthenticationManager authManager;
     private final JwtProvider jwtProvider;
+    private final RefreshTokenService refreshTokenService;
 
 
     @PostMapping("/auth/register")
@@ -108,5 +113,26 @@ public class UserController {
         return ResponseEntity.ok(UserResponse.fromUser(user));
     }
 
+    @PostMapping("/refreshtoken")
+    public ResponseEntity<?> refreshToken(@RequestBody RefreshTokenRequest refreshTokenRequest){
+        String refreshToken = refreshTokenRequest.getRefreshToken();
+
+
+        return refreshTokenService.findByToken(refreshToken)
+                .map(refreshTokenService::verify)
+                .map(RefreshToken::getUser)
+                .map(user -> {
+                    String token = jwtProvider.generateToken(user);
+                    refreshTokenService.deleteByUser(user);
+                    RefreshToken refreshToken2 = refreshTokenService.createRefreshToken(user);
+                    return ResponseEntity.status(HttpStatus.CREATED)
+                            .body(JwtUserResponse.builder()
+                                    .token(token)
+                                    .refreshToken(refreshToken2.getToken())
+                                    .build());
+                })
+                .orElseThrow(() -> new TokenRefreshException(refreshToken, "no encontrado"));
+
+    }
 
 }
